@@ -492,7 +492,7 @@
     return {
       players: [],
       colors: {},
-      timeLabels: Array.from({length: NUM_SLOTS}, (_, i) => 'Zeit ' + (i + 1)),
+      timeLabels: Array.from({length: NUM_SLOTS}, (_, i) => String(i + 1)),
       // assignments[slotIndex][position] = playerName or null
       assignments: Array.from({length: NUM_SLOTS}, () =>
         Object.fromEntries(POSITIONS.map(p => [p, null]))
@@ -508,6 +508,9 @@
       // basic shape validation / migration safety
       if (!parsed.players || !parsed.assignments || !parsed.timeLabels) return defaultState();
       if (!parsed.colors) parsed.colors = {};
+      parsed.timeLabels = parsed.timeLabels.map(label =>
+        /^Zeit \d+$/.test(label) ? label.replace('Zeit ', '') : label
+      );
       return parsed;
     } catch (e) {
       return defaultState();
