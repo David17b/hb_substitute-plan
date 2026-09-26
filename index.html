@@ -74,6 +74,18 @@
     color: var(--text-dim);
     margin: 0 0 10px 0;
   }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  #mainLayout.pool-hidden {
+    grid-template-columns: 1fr;
+  }
+  #playerPoolPanel.hidden {
+    display: none;
+  }
   #addPlayerForm {
     display: flex;
     gap: 6px;
@@ -100,18 +112,31 @@
   }
   #addPlayerForm button:hover { background: var(--accent); }
 
-  #playerPool {
+  .pool-section {
+    margin-bottom: 14px;
+  }
+  .pool-section-title {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .player-pool-list {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-height: 60px;
+    min-height: 44px;
     padding: 6px;
     border-radius: 8px;
     transition: background 0.15s;
   }
-  #playerPool.dragover {
+  .player-pool-list.dragover {
     background: rgba(56, 189, 248, 0.1);
     outline: 2px dashed var(--accent);
+  }
+  #pausedPool .player-chip {
+    opacity: 0.7;
   }
   .player-chip {
     display: flex;
@@ -202,6 +227,7 @@
   .time-label-cell {
     background: var(--panel-light);
     padding: 4px;
+    position: relative;
   }
   .time-label-input {
     width: 100%;
@@ -211,12 +237,49 @@
     text-align: center;
     font-size: 13px;
     font-weight: 600;
-    padding: 6px 2px;
+    padding: 6px 22px 6px 2px;
     border-radius: 4px;
   }
   .time-label-input:focus {
     outline: 1px solid var(--accent);
     background: var(--panel);
+  }
+  .remove-row-btn {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 4px;
+  }
+  .remove-row-btn:hover {
+    color: var(--conflict);
+    background: rgba(220, 38, 38, 0.12);
+  }
+  .add-row-cell {
+    padding: 8px !important;
+    background: var(--panel-light);
+  }
+  .add-row-btn {
+    width: 100%;
+    background: var(--panel-light);
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .add-row-btn:hover {
+    background: var(--chip-hover);
+    color: var(--text);
+    border-color: var(--accent);
   }
   .slot-cell {
     height: 54px;
@@ -382,6 +445,7 @@
 <body>
 
 <div class="toolbar">
+  <button id="togglePoolPanelBtn">👥 Spielerpool ausblenden</button>
   <button id="themeBtn">☀️ Helles Design</button>
   <button id="fullscreenBtn">⛶ Vollbild</button>
   <button id="saveFileBtn">💾 Als Datei speichern</button>
@@ -392,15 +456,24 @@
   <button id="resetBtn">🗑️ Alles zurücksetzen</button>
 </div>
 
-<div class="layout">
-  <div class="panel">
+<div class="layout" id="mainLayout">
+  <div class="panel player-panel" id="playerPoolPanel">
     <h2>Spieler</h2>
-    <form id="addPlayerForm">
-      <input type="text" id="playerNameInput" placeholder="Name" autocomplete="off" />
-      <button type="submit">+</button>
-    </form>
-    <div id="playerPool"></div>
-    <div class="saved-note">Änderungen werden automatisch lokal gespeichert.</div>
+    <div id="poolContent">
+      <form id="addPlayerForm">
+        <input type="text" id="playerNameInput" placeholder="Name" autocomplete="off" />
+        <button type="submit">+</button>
+      </form>
+      <div class="pool-section">
+        <div class="pool-section-title" id="activePoolTitle">Aktive Spieler</div>
+        <div id="activePool" class="player-pool-list"></div>
+      </div>
+      <div class="pool-section">
+        <div class="pool-section-title">Pausierende Spieler</div>
+        <div id="pausedPool" class="player-pool-list"></div>
+      </div>
+      <div class="saved-note">Änderungen werden automatisch lokal gespeichert.</div>
+    </div>
   </div>
 
   <div class="panel">
@@ -492,6 +565,7 @@
     return {
       players: [],
       colors: {},
+      paused: {},
       timeLabels: Array.from({length: NUM_SLOTS}, (_, i) => String(i + 1)),
       // assignments[slotIndex][position] = playerName or null
       assignments: Array.from({length: NUM_SLOTS}, () =>
@@ -508,6 +582,7 @@
       // basic shape validation / migration safety
       if (!parsed.players || !parsed.assignments || !parsed.timeLabels) return defaultState();
       if (!parsed.colors) parsed.colors = {};
+      if (!parsed.paused) parsed.paused = {};
       parsed.timeLabels = parsed.timeLabels.map(label =>
         /^Zeit \d+$/.test(label) ? label.replace('Zeit ', '') : label
       );
@@ -527,7 +602,8 @@
     }
   }
 
-  const playerPool = document.getElementById('playerPool');
+  const activePool = document.getElementById('activePool');
+  const pausedPool = document.getElementById('pausedPool');
   const scheduleBody = document.getElementById('scheduleBody');
   const addPlayerForm = document.getElementById('addPlayerForm');
   const playerNameInput = document.getElementById('playerNameInput');
@@ -548,6 +624,10 @@
       state.colors[newName] = state.colors[oldName];
       delete state.colors[oldName];
     }
+    if (state.paused[oldName] !== undefined) {
+      state.paused[newName] = state.paused[oldName];
+      delete state.paused[oldName];
+    }
     state.assignments.forEach(row => {
       Object.keys(row).forEach(pos => {
         if (row[pos] === oldName) row[pos] = newName;
@@ -557,7 +637,11 @@
     return true;
   }
 
-  function reorderPlayer(draggedName, targetName, before) {
+  function isPaused(name) {
+    return !!state.paused[name];
+  }
+
+  function reorderPlayer(draggedName, targetName, before, targetGroupPaused) {
     const arr = state.players;
     const fromIdx = arr.indexOf(draggedName);
     if (fromIdx === -1) return;
@@ -566,6 +650,20 @@
     if (targetIdx === -1) targetIdx = arr.length;
     const insertIdx = before ? targetIdx : targetIdx + 1;
     arr.splice(insertIdx, 0, draggedName);
+    if (targetGroupPaused !== undefined) {
+      state.paused[draggedName] = targetGroupPaused;
+    }
+    saveState();
+    renderAll();
+  }
+
+  function moveToGroupEnd(name, toPaused) {
+    const arr = state.players;
+    const fromIdx = arr.indexOf(name);
+    if (fromIdx === -1) return;
+    arr.splice(fromIdx, 1);
+    arr.push(name);
+    state.paused[name] = toPaused;
     saveState();
     renderAll();
   }
@@ -582,121 +680,134 @@
     });
   }
 
-  function renderPool() {
-    playerPool.innerHTML = '';
-    if (state.players.length === 0) {
+  function createPlayerChip(name, sectionPaused) {
+    const color = state.colors[name] || '#334155';
+    const chip = document.createElement('div');
+    chip.className = 'player-chip';
+    chip.draggable = true;
+    chip.dataset.name = name;
+    chip.style.background = color;
+    chip.style.color = contrastColor(color);
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'color-swatch';
+    colorInput.value = color;
+    colorInput.title = 'Farbe für ' + name;
+    colorInput.addEventListener('input', () => {
+      state.colors[name] = colorInput.value;
+      saveState();
+      renderAll();
+    });
+    chip.appendChild(colorInput);
+
+    const label = document.createElement('span');
+    label.className = 'player-chip-label';
+    label.textContent = name + (isAssigned(name) ? ' ✓' : '');
+    chip.appendChild(label);
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'remove-btn';
+    editBtn.textContent = '✎';
+    editBtn.title = 'Namen bearbeiten';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'name-edit-input';
+      input.value = name;
+      chip.replaceChild(input, label);
+      input.focus();
+      input.select();
+
+      let finished = false;
+      const finishEdit = (commit) => {
+        if (finished) return;
+        finished = true;
+        if (commit) {
+          const ok = renamePlayer(name, input.value);
+          if (!ok && input.value.trim() !== name) {
+            renderAll();
+            return;
+          }
+        }
+        renderAll();
+      };
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') finishEdit(true);
+        if (ev.key === 'Escape') finishEdit(false);
+      });
+      input.addEventListener('blur', () => finishEdit(true));
+    });
+    chip.appendChild(editBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Spieler entfernen';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFromAllSlots(name);
+      state.players = state.players.filter(p => p !== name);
+      delete state.colors[name];
+      delete state.paused[name];
+      saveState();
+      renderAll();
+    });
+    chip.appendChild(removeBtn);
+
+    chip.addEventListener('dragstart', (e) => {
+      draggedPlayer = { name, from: 'pool' };
+      chip.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    chip.addEventListener('dragend', () => {
+      chip.classList.remove('dragging');
+      draggedPlayer = null;
+    });
+
+    chip.addEventListener('dragover', (e) => {
+      if (!draggedPlayer || draggedPlayer.from !== 'pool' || draggedPlayer.name === name) return;
+      e.preventDefault();
+      e.stopPropagation();
+      chip.classList.add('reorder-target');
+    });
+    chip.addEventListener('dragleave', () => {
+      chip.classList.remove('reorder-target');
+    });
+    chip.addEventListener('drop', (e) => {
+      if (!draggedPlayer || draggedPlayer.from !== 'pool' || draggedPlayer.name === name) return;
+      e.preventDefault();
+      e.stopPropagation();
+      chip.classList.remove('reorder-target');
+      const rect = chip.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      reorderPlayer(draggedPlayer.name, name, before, sectionPaused);
+    });
+
+    return chip;
+  }
+
+  function renderPoolSection(container, names, sectionPaused, emptyText) {
+    container.innerHTML = '';
+    if (names.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
-      hint.textContent = 'Noch keine Spieler hinzugefügt.';
-      playerPool.appendChild(hint);
+      hint.textContent = emptyText;
+      container.appendChild(hint);
       return;
     }
-    state.players.forEach(name => {
-      const color = state.colors[name] || '#334155';
-      const chip = document.createElement('div');
-      chip.className = 'player-chip';
-      chip.draggable = true;
-      chip.dataset.name = name;
-      chip.style.background = color;
-      chip.style.color = contrastColor(color);
-
-      const colorInput = document.createElement('input');
-      colorInput.type = 'color';
-      colorInput.className = 'color-swatch';
-      colorInput.value = color;
-      colorInput.title = 'Farbe für ' + name;
-      colorInput.addEventListener('input', () => {
-        state.colors[name] = colorInput.value;
-        saveState();
-        renderAll();
-      });
-      chip.appendChild(colorInput);
-
-      const label = document.createElement('span');
-      label.className = 'player-chip-label';
-      label.textContent = name + (isAssigned(name) ? ' ✓' : '');
-      chip.appendChild(label);
-
-      const editBtn = document.createElement('button');
-      editBtn.className = 'remove-btn';
-      editBtn.textContent = '✎';
-      editBtn.title = 'Namen bearbeiten';
-      editBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'name-edit-input';
-        input.value = name;
-        chip.replaceChild(input, label);
-        input.focus();
-        input.select();
-
-        let finished = false;
-        const finishEdit = (commit) => {
-          if (finished) return;
-          finished = true;
-          if (commit) {
-            const ok = renamePlayer(name, input.value);
-            if (!ok && input.value.trim() !== name) {
-              renderAll();
-              return;
-            }
-          }
-          renderAll();
-        };
-        input.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter') finishEdit(true);
-          if (ev.key === 'Escape') finishEdit(false);
-        });
-        input.addEventListener('blur', () => finishEdit(true));
-      });
-      chip.appendChild(editBtn);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'remove-btn';
-      removeBtn.textContent = '✕';
-      removeBtn.title = 'Spieler entfernen';
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        removeFromAllSlots(name);
-        state.players = state.players.filter(p => p !== name);
-        delete state.colors[name];
-        saveState();
-        renderAll();
-      });
-      chip.appendChild(removeBtn);
-
-      chip.addEventListener('dragstart', (e) => {
-        draggedPlayer = { name, from: 'pool' };
-        chip.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      chip.addEventListener('dragend', () => {
-        chip.classList.remove('dragging');
-        draggedPlayer = null;
-      });
-
-      chip.addEventListener('dragover', (e) => {
-        if (!draggedPlayer || draggedPlayer.from !== 'pool' || draggedPlayer.name === name) return;
-        e.preventDefault();
-        e.stopPropagation();
-        chip.classList.add('reorder-target');
-      });
-      chip.addEventListener('dragleave', () => {
-        chip.classList.remove('reorder-target');
-      });
-      chip.addEventListener('drop', (e) => {
-        if (!draggedPlayer || draggedPlayer.from !== 'pool' || draggedPlayer.name === name) return;
-        e.preventDefault();
-        e.stopPropagation();
-        chip.classList.remove('reorder-target');
-        const rect = chip.getBoundingClientRect();
-        const before = (e.clientY - rect.top) < rect.height / 2;
-        reorderPlayer(draggedPlayer.name, name, before);
-      });
-
-      playerPool.appendChild(chip);
+    names.forEach(name => {
+      container.appendChild(createPlayerChip(name, sectionPaused));
     });
+  }
+
+  function renderPool() {
+    const activeNames = state.players.filter(n => !isPaused(n));
+    const pausedNames = state.players.filter(n => isPaused(n));
+    document.getElementById('activePoolTitle').textContent = 'Aktive Spieler (' + activeNames.length + ')';
+    renderPoolSection(activePool, activeNames, false, 'Noch keine aktiven Spieler.');
+    renderPoolSection(pausedPool, pausedNames, true, 'Niemand pausiert gerade.');
   }
 
   function isAssignedInRow(name, slotIndex) {
@@ -711,6 +822,28 @@
       if (name) counts[name] = (counts[name] || 0) + 1;
     });
     return new Set(Object.keys(counts).filter(n => counts[n] > 1));
+  }
+
+  function addTimeSlot() {
+    state.timeLabels.push(String(state.timeLabels.length + 1));
+    state.assignments.push(Object.fromEntries(POSITIONS.map(p => [p, null])));
+    saveState();
+    renderAll();
+  }
+
+  function removeTimeSlot(index) {
+    if (state.timeLabels.length <= 1) {
+      alert('Es muss mindestens eine Zeile geben.');
+      return;
+    }
+    const rowHasPlayers = Object.values(state.assignments[index]).some(Boolean);
+    if (rowHasPlayers && !confirm('Diese Zeile enthält bereits eingeteilte Spieler. Wirklich entfernen?')) {
+      return;
+    }
+    state.timeLabels.splice(index, 1);
+    state.assignments.splice(index, 1);
+    saveState();
+    renderAll();
   }
 
   function renderSchedule() {
@@ -730,6 +863,14 @@
         saveState();
       });
       timeTd.appendChild(timeInput);
+
+      const removeRowBtn = document.createElement('button');
+      removeRowBtn.className = 'remove-row-btn';
+      removeRowBtn.textContent = '✕';
+      removeRowBtn.title = 'Diese Zeile entfernen';
+      removeRowBtn.addEventListener('click', () => removeTimeSlot(slotIndex));
+      timeTd.appendChild(removeRowBtn);
+
       tr.appendChild(timeTd);
 
       const conflicts = findConflicts(slotIndex);
@@ -821,31 +962,55 @@
       scheduleBody.appendChild(tr);
     });
 
+    const addRowTr = document.createElement('tr');
+    const addRowTd = document.createElement('td');
+    addRowTd.colSpan = POSITIONS.length + 1;
+    addRowTd.className = 'add-row-cell';
+    const addRowBtn = document.createElement('button');
+    addRowBtn.className = 'add-row-btn';
+    addRowBtn.textContent = '+ Zeile hinzufügen';
+    addRowBtn.addEventListener('click', addTimeSlot);
+    addRowTd.appendChild(addRowBtn);
+    addRowTr.appendChild(addRowTd);
+    scheduleBody.appendChild(addRowTr);
+
     conflictNote.textContent = anyConflict
       ? '⚠️ Ein oder mehrere Spieler sind zur gleichen Zeit auf mehreren Positionen eingetragen.'
       : '';
   }
 
-  // Drop on pool = unassign
-  playerPool.addEventListener('dragover', (e) => {
-    if (draggedPlayer && draggedPlayer.from !== 'pool') {
+  // Drop auf einen Pool-Bereich (leere Fläche):
+  // - Spieler vom Spielplan hierher = aus dem Spielplan entfernen + dieser Gruppe zuordnen
+  // - Spieler aus dem jeweils anderen Pool-Bereich = Gruppe wechseln (ans Ende)
+  function setupPoolContainerDrop(container, toPaused) {
+    container.addEventListener('dragover', (e) => {
+      if (!draggedPlayer) return;
       e.preventDefault();
-      playerPool.classList.add('dragover');
-    }
-  });
-  playerPool.addEventListener('dragleave', () => {
-    playerPool.classList.remove('dragover');
-  });
-  playerPool.addEventListener('drop', (e) => {
-    e.preventDefault();
-    playerPool.classList.remove('dragover');
-    if (draggedPlayer && draggedPlayer.from !== 'pool') {
-      const { slot, pos } = draggedPlayer.from;
-      state.assignments[slot][pos] = null;
-      saveState();
-      renderAll();
-    }
-  });
+      container.classList.add('dragover');
+    });
+    container.addEventListener('dragleave', () => {
+      container.classList.remove('dragover');
+    });
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      container.classList.remove('dragover');
+      if (!draggedPlayer) return;
+      if (draggedPlayer.from === 'pool') {
+        if (isPaused(draggedPlayer.name) !== toPaused) {
+          moveToGroupEnd(draggedPlayer.name, toPaused);
+        }
+      } else {
+        const { slot, pos } = draggedPlayer.from;
+        state.assignments[slot][pos] = null;
+        state.paused[draggedPlayer.name] = toPaused;
+        saveState();
+        renderAll();
+      }
+    });
+  }
+
+  setupPoolContainerDrop(activePool, false);
+  setupPoolContainerDrop(pausedPool, true);
 
   addPlayerForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -869,6 +1034,24 @@
       renderAll();
     }
   });
+
+  const POOL_HIDDEN_KEY = 'handball-spielplan-pool-hidden';
+  const togglePoolPanelBtn = document.getElementById('togglePoolPanelBtn');
+  const playerPoolPanel = document.getElementById('playerPoolPanel');
+  const mainLayout = document.getElementById('mainLayout');
+
+  function setPoolHidden(hidden) {
+    playerPoolPanel.classList.toggle('hidden', hidden);
+    mainLayout.classList.toggle('pool-hidden', hidden);
+    togglePoolPanelBtn.textContent = hidden ? '👥 Spielerpool anzeigen' : '👥 Spielerpool ausblenden';
+    try { localStorage.setItem(POOL_HIDDEN_KEY, hidden ? '1' : '0'); } catch (e) {}
+  }
+
+  togglePoolPanelBtn.addEventListener('click', () => {
+    setPoolHidden(!playerPoolPanel.classList.contains('hidden'));
+  });
+
+  setPoolHidden(localStorage.getItem(POOL_HIDDEN_KEY) === '1');
 
   const THEME_KEY = 'handball-spielplan-theme';
 
@@ -1054,6 +1237,7 @@
         return;
       }
       if (!parsed.colors) parsed.colors = {};
+      if (!parsed.paused) parsed.paused = {};
       if (!confirm('Der aktuelle Spielplan wird durch die Version aus Google Drive ersetzt. Fortfahren?')) {
         setDriveStatus('Laden abgebrochen.');
         return;
@@ -1105,6 +1289,7 @@
           return;
         }
         if (!parsed.colors) parsed.colors = {};
+        if (!parsed.paused) parsed.paused = {};
         if (!confirm('Der aktuell angezeigte Spielplan wird durch die geladene Datei ersetzt. Fortfahren?')) return;
         state = parsed;
         saveState();
@@ -1175,7 +1360,7 @@
 
       const countSpan = document.createElement('span');
       countSpan.className = 'stat-count';
-      countSpan.textContent = count + ' / ' + NUM_SLOTS;
+      countSpan.textContent = count + ' / ' + state.timeLabels.length;
       chip.appendChild(countSpan);
 
       statsList.appendChild(chip);
