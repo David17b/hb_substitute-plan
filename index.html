@@ -451,8 +451,6 @@
   <button id="saveFileBtn">💾 Als Datei speichern</button>
   <button id="loadFileBtn">📂 Datei laden</button>
   <input type="file" id="loadFileInput" accept=".json,application/json" style="display:none;" />
-  <button id="exportBtn">📋 Als Text kopieren</button>
-  <button id="printBtn">🖨️ Drucken</button>
   <button id="resetBtn">🗑️ Alles zurücksetzen</button>
 </div>
 
@@ -1300,29 +1298,6 @@
     };
     reader.onerror = () => alert('Die Datei konnte nicht gelesen werden.');
     reader.readAsText(file);
-  });
-
-  document.getElementById('printBtn').addEventListener('click', () => {
-    window.print();
-  });
-
-  document.getElementById('exportBtn').addEventListener('click', async () => {
-    const lines = [];
-    lines.push(['Zeit', ...['Außen links','Rückraum links','Rückraum Mitte','Rückraum rechts','Außen rechts','Kreisläufer']].join('\t'));
-    state.timeLabels.forEach((label, i) => {
-      const row = state.assignments[i];
-      lines.push([label, ...POSITIONS.map(p => row[p] || '')].join('\t'));
-    });
-    const text = lines.join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      const btn = document.getElementById('exportBtn');
-      const original = btn.textContent;
-      btn.textContent = '✓ Kopiert!';
-      setTimeout(() => { btn.textContent = original; }, 1500);
-    } catch (e) {
-      alert('Kopieren nicht möglich. Hier der Text:\n\n' + text);
-    }
   });
 
   function countAssignments(name) {
