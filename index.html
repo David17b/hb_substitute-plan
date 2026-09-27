@@ -440,6 +440,81 @@
     font-size: 13.5px;
     cursor: pointer;
   }
+  .drive-save-row {
+    display: flex;
+    gap: 6px;
+  }
+  .drive-save-row input {
+    flex: 1;
+    min-width: 0;
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 7px 8px;
+    font-size: 13.5px;
+  }
+  .drive-save-row button {
+    background: var(--accent-dark);
+    border: none;
+    color: white;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .drive-file-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .drive-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+  .drive-file-row:hover {
+    background: var(--chip-hover);
+  }
+  .drive-file-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+  }
+  .drive-file-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+  .drive-file-date {
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+  .drive-file-delete {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    flex-shrink: 0;
+    border-radius: 4px;
+  }
+  .drive-file-delete:hover {
+    color: var(--conflict);
+    background: rgba(220, 38, 38, 0.12);
+  }
 </style>
 </head>
 <body>
@@ -525,9 +600,19 @@
 
   <div class="toolbar" style="margin-top:12px; margin-bottom:0;">
     <button id="googleConnectBtn">🔗 Mit Google verbinden</button>
-    <button id="googleSaveBtn" style="display:none;">☁️ In Google Drive speichern</button>
-    <button id="googleLoadBtn" style="display:none;">☁️ Aus Google Drive laden</button>
   </div>
+
+  <div id="driveActions" style="display:none;">
+    <div class="drive-save-row">
+      <input type="text" id="driveSaveNameInput" placeholder="Name für diesen Datensatz (z.B. Herbstliga)" />
+      <button id="googleSaveBtn">💾 Speichern</button>
+    </div>
+    <div class="toolbar" style="margin-top:10px; margin-bottom:0;">
+      <button id="googleRefreshListBtn">📂 Gespeicherte Datensätze anzeigen</button>
+    </div>
+    <div id="driveFileList" class="drive-file-list"></div>
+  </div>
+
   <div class="saved-note" id="driveStatus"></div>
 </div>
 
@@ -1096,15 +1181,18 @@
   // ==== Google Drive Integration ====
   const CLIENT_ID_KEY = 'handball-spielplan-google-client-id';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-  const DRIVE_FILENAME = 'handball-spielplan.json';
+  const DRIVE_FILE_PREFIX = 'handball-spielplan_';
 
   let googleAccessToken = null;
   let tokenClient = null;
 
   const clientIdInput = document.getElementById('clientIdInput');
   const googleConnectBtn = document.getElementById('googleConnectBtn');
+  const driveActions = document.getElementById('driveActions');
+  const driveSaveNameInput = document.getElementById('driveSaveNameInput');
   const googleSaveBtn = document.getElementById('googleSaveBtn');
-  const googleLoadBtn = document.getElementById('googleLoadBtn');
+  const googleRefreshListBtn = document.getElementById('googleRefreshListBtn');
+  const driveFileList = document.getElementById('driveFileList');
   const driveStatus = document.getElementById('driveStatus');
 
   function getClientId() {
@@ -1138,6 +1226,7 @@
         if (tokenResponse && tokenResponse.access_token) {
           googleAccessToken = tokenResponse.access_token;
           updateGoogleUI(true);
+          refreshDriveList();
           setDriveStatus('Verbunden mit Google.');
         }
       },
@@ -1149,8 +1238,7 @@
 
   function updateGoogleUI(connected) {
     googleConnectBtn.textContent = connected ? '🔗 Mit Google verbunden' : '🔗 Mit Google verbinden';
-    googleSaveBtn.style.display = connected ? 'inline-block' : 'none';
-    googleLoadBtn.style.display = connected ? 'inline-block' : 'none';
+    driveActions.style.display = connected ? 'block' : 'none';
   }
 
   googleConnectBtn.addEventListener('click', () => {
@@ -1168,8 +1256,17 @@
     tokenClient.requestAccessToken({ prompt: googleAccessToken ? '' : 'consent' });
   });
 
-  async function findDriveFile() {
-    const query = encodeURIComponent("name='" + DRIVE_FILENAME + "' and trashed=false");
+  function driveFileName(datasetName) {
+    return DRIVE_FILE_PREFIX + datasetName.trim() + '.json';
+  }
+
+  function driveDisplayName(fileName) {
+    return fileName.replace(DRIVE_FILE_PREFIX, '').replace(/\.json$/, '');
+  }
+
+  async function findExactDriveFile(fileName) {
+    const escaped = fileName.replace(/'/g, "\\'");
+    const query = encodeURIComponent("name='" + escaped + "' and trashed=false");
     const res = await fetch(
       'https://www.googleapis.com/drive/v3/files?q=' + query + '&spaces=drive&fields=files(id,name,modifiedTime)',
       { headers: { Authorization: 'Bearer ' + googleAccessToken } }
@@ -1179,13 +1276,95 @@
     return (data.files && data.files[0]) || null;
   }
 
+  async function listDriveDatasets() {
+    const query = encodeURIComponent("name contains '" + DRIVE_FILE_PREFIX + "' and trashed=false");
+    const res = await fetch(
+      'https://www.googleapis.com/drive/v3/files?q=' + query + '&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc',
+      { headers: { Authorization: 'Bearer ' + googleAccessToken } }
+    );
+    if (!res.ok) throw new Error('Drive-Suche fehlgeschlagen (' + res.status + ')');
+    const data = await res.json();
+    return data.files || [];
+  }
+
+  function renderDriveFileList(files) {
+    driveFileList.innerHTML = '';
+    if (files.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'Noch keine Datensätze in Google Drive gespeichert.';
+      driveFileList.appendChild(hint);
+      return;
+    }
+    files.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'drive-file-row';
+
+      const info = document.createElement('div');
+      info.className = 'drive-file-info';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'drive-file-name';
+      nameEl.textContent = driveDisplayName(f.name);
+      info.appendChild(nameEl);
+
+      const dateEl = document.createElement('div');
+      dateEl.className = 'drive-file-date';
+      const modified = f.modifiedTime ? new Date(f.modifiedTime) : null;
+      dateEl.textContent = modified ? 'Zuletzt geändert: ' + modified.toLocaleString('de-DE') : '';
+      info.appendChild(dateEl);
+
+      row.appendChild(info);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'drive-file-delete';
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.title = 'Diesen Datensatz aus Google Drive löschen';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteDriveDataset(f.id, driveDisplayName(f.name));
+      });
+      row.appendChild(deleteBtn);
+
+      row.addEventListener('click', () => {
+        loadDriveDataset(f.id, driveDisplayName(f.name));
+      });
+
+      driveFileList.appendChild(row);
+    });
+  }
+
+  async function refreshDriveList() {
+    if (!googleAccessToken) return;
+    try {
+      const files = await listDriveDatasets();
+      renderDriveFileList(files);
+    } catch (err) {
+      console.error(err);
+      setDriveStatus('Datensätze konnten nicht geladen werden.', true);
+    }
+  }
+
+  googleRefreshListBtn.addEventListener('click', async () => {
+    if (!googleAccessToken) { setDriveStatus('Bitte zuerst mit Google verbinden.', true); return; }
+    setDriveStatus('Lade Liste der Datensätze …');
+    await refreshDriveList();
+    setDriveStatus('Datensätze aktualisiert.');
+  });
+
   googleSaveBtn.addEventListener('click', async () => {
     if (!googleAccessToken) { setDriveStatus('Bitte zuerst mit Google verbinden.', true); return; }
-    setDriveStatus('Speichere in Google Drive …');
+    const datasetName = driveSaveNameInput.value.trim();
+    if (!datasetName) {
+      setDriveStatus('Bitte einen Namen für den Datensatz eingeben.', true);
+      return;
+    }
+    const fileName = driveFileName(datasetName);
+    setDriveStatus('Speichere "' + datasetName + '" in Google Drive …');
     try {
-      const existing = await findDriveFile();
+      const existing = await findExactDriveFile(fileName);
       const content = JSON.stringify(state, null, 2);
-      const metadata = { name: DRIVE_FILENAME, mimeType: 'application/json' };
+      const metadata = { name: fileName, mimeType: 'application/json' };
       const boundary = 'handball_boundary_' + Date.now();
       const delimiter = '\r\n--' + boundary + '\r\n';
       const closeDelim = '\r\n--' + boundary + '--';
@@ -1208,24 +1387,22 @@
         body: multipartBody
       });
       if (!res.ok) throw new Error('Speichern fehlgeschlagen (' + res.status + ')');
-      setDriveStatus('Gespeichert in Google Drive: ' + new Date().toLocaleString('de-DE'));
+      setDriveStatus('Gespeichert: "' + datasetName + '" (' + new Date().toLocaleString('de-DE') + ')');
+      refreshDriveList();
     } catch (err) {
       console.error(err);
       setDriveStatus('Speichern in Google Drive fehlgeschlagen.', true);
     }
   });
 
-  googleLoadBtn.addEventListener('click', async () => {
-    if (!googleAccessToken) { setDriveStatus('Bitte zuerst mit Google verbinden.', true); return; }
-    setDriveStatus('Lade aus Google Drive …');
+  async function loadDriveDataset(fileId, label) {
+    if (!confirm('Der aktuelle Spielplan wird durch den Datensatz "' + label + '" ersetzt. Fortfahren?')) {
+      return;
+    }
+    setDriveStatus('Lade "' + label + '" aus Google Drive …');
     try {
-      const existing = await findDriveFile();
-      if (!existing) {
-        setDriveStatus('Keine Datei "' + DRIVE_FILENAME + '" in Google Drive gefunden.', true);
-        return;
-      }
       const res = await fetch(
-        'https://www.googleapis.com/drive/v3/files/' + existing.id + '?alt=media',
+        'https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media',
         { headers: { Authorization: 'Bearer ' + googleAccessToken } }
       );
       if (!res.ok) throw new Error('Laden fehlgeschlagen (' + res.status + ')');
@@ -1236,19 +1413,33 @@
       }
       if (!parsed.colors) parsed.colors = {};
       if (!parsed.paused) parsed.paused = {};
-      if (!confirm('Der aktuelle Spielplan wird durch die Version aus Google Drive ersetzt. Fortfahren?')) {
-        setDriveStatus('Laden abgebrochen.');
-        return;
-      }
       state = parsed;
       saveState();
       renderAll();
-      setDriveStatus('Geladen aus Google Drive: ' + new Date().toLocaleString('de-DE'));
+      driveSaveNameInput.value = label;
+      setDriveStatus('Geladen: "' + label + '" (' + new Date().toLocaleString('de-DE') + ')');
     } catch (err) {
       console.error(err);
       setDriveStatus('Laden aus Google Drive fehlgeschlagen.', true);
     }
-  });
+  }
+
+  async function deleteDriveDataset(fileId, label) {
+    if (!confirm('Datensatz "' + label + '" endgültig aus Google Drive löschen?')) return;
+    setDriveStatus('Lösche "' + label + '" …');
+    try {
+      const res = await fetch(
+        'https://www.googleapis.com/drive/v3/files/' + fileId,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + googleAccessToken } }
+      );
+      if (!res.ok && res.status !== 204) throw new Error('Löschen fehlgeschlagen (' + res.status + ')');
+      setDriveStatus('Gelöscht: "' + label + '"');
+      refreshDriveList();
+    } catch (err) {
+      console.error(err);
+      setDriveStatus('Löschen fehlgeschlagen.', true);
+    }
+  }
 
   document.getElementById('saveFileBtn').addEventListener('click', () => {
     try {
