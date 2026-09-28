@@ -89,7 +89,7 @@
   #addPlayerForm {
     display: flex;
     gap: 6px;
-    margin-bottom: 12px;
+    margin-top: 4px;
   }
   #playerNameInput {
     flex: 1;
@@ -535,20 +535,19 @@
 
 <div class="layout" id="mainLayout">
   <div class="panel player-panel" id="playerPoolPanel">
-    <h2>Spieler</h2>
     <div id="poolContent">
-      <form id="addPlayerForm">
-        <input type="text" id="playerNameInput" placeholder="Name" autocomplete="off" />
-        <button type="submit">+</button>
-      </form>
       <div class="pool-section">
         <div class="pool-section-title" id="activePoolTitle">Aktive Spieler</div>
         <div id="activePool" class="player-pool-list"></div>
       </div>
       <div class="pool-section">
-        <div class="pool-section-title">Pausierende Spieler</div>
+        <div class="pool-section-title" id="pausedPoolTitle">Pausierende Spieler</div>
         <div id="pausedPool" class="player-pool-list"></div>
       </div>
+      <form id="addPlayerForm">
+        <input type="text" id="playerNameInput" placeholder="Name" autocomplete="off" />
+        <button type="submit">+</button>
+      </form>
       <div class="saved-note">Änderungen werden automatisch lokal gespeichert.</div>
     </div>
   </div>
@@ -892,6 +891,7 @@
     const activeNames = state.players.filter(n => !isPaused(n));
     const pausedNames = state.players.filter(n => isPaused(n));
     document.getElementById('activePoolTitle').textContent = 'Aktive Spieler (' + activeNames.length + ')';
+    document.getElementById('pausedPoolTitle').textContent = 'Pausierende Spieler (' + pausedNames.length + ')';
     renderPoolSection(activePool, activeNames, false, 'Noch keine aktiven Spieler.');
     renderPoolSection(pausedPool, pausedNames, true, 'Niemand pausiert gerade.');
   }
