@@ -365,30 +365,45 @@
   }
   #statsList {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
   }
-  .stat-chip {
-    display: flex;
+  .stat-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 160px) 1fr 52px;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+  }
+  .stat-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat-bar {
+    display: flex;
+    gap: 3px;
+    height: 20px;
+  }
+  .stat-segment {
+    flex: 1;
+    border-radius: 4px;
     background: var(--panel-light);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13.5px;
+    border: 1px solid var(--border);
   }
-  .stat-chip .stat-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
+  .stat-segment.filled {
+    border-color: transparent;
   }
-  .stat-chip .stat-count {
+  .stat-count {
     font-weight: 700;
-    color: var(--accent);
+    font-size: 13.5px;
+    text-align: right;
+    color: var(--text);
   }
-  .stat-chip.stat-zero .stat-count {
+  .stat-row.stat-zero .stat-count {
     color: var(--text-dim);
+    font-weight: 500;
   }
   #driveSetupDetails {
     font-size: 13.5px;
@@ -1511,28 +1526,38 @@
       statsList.appendChild(hint);
       return;
     }
+    const total = state.timeLabels.length;
     state.players.forEach(name => {
       const count = countAssignments(name);
       const color = state.colors[name] || '#334155';
 
-      const chip = document.createElement('div');
-      chip.className = 'stat-chip' + (count === 0 ? ' stat-zero' : '');
+      const row = document.createElement('div');
+      row.className = 'stat-row' + (count === 0 ? ' stat-zero' : '');
 
-      const dot = document.createElement('span');
-      dot.className = 'stat-dot';
-      dot.style.background = color;
-      chip.appendChild(dot);
+      const label = document.createElement('div');
+      label.className = 'stat-name';
+      label.textContent = name;
+      row.appendChild(label);
 
-      const label = document.createElement('span');
-      label.textContent = name + ': ';
-      chip.appendChild(label);
+      const bar = document.createElement('div');
+      bar.className = 'stat-bar';
+      for (let i = 0; i < total; i++) {
+        const seg = document.createElement('div');
+        seg.className = 'stat-segment';
+        if (i < count) {
+          seg.classList.add('filled');
+          seg.style.background = color;
+        }
+        bar.appendChild(seg);
+      }
+      row.appendChild(bar);
 
-      const countSpan = document.createElement('span');
+      const countSpan = document.createElement('div');
       countSpan.className = 'stat-count';
-      countSpan.textContent = count + ' / ' + state.timeLabels.length;
-      chip.appendChild(countSpan);
+      countSpan.textContent = count + ' / ' + total;
+      row.appendChild(countSpan);
 
-      statsList.appendChild(chip);
+      statsList.appendChild(row);
     });
   }
 
