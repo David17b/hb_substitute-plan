@@ -286,7 +286,7 @@
     border-color: var(--accent);
   }
   .slot-cell {
-    height: 62px;
+    height: 54px;
     padding: 5px;
     transition: background 0.12s;
   }
@@ -435,12 +435,19 @@
     padding: 8px 10px;
     color: var(--text);
   }
-  #clientIdForm {
+  .drive-note {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+  }
+  #clientIdForm, #jsonbinKeyForm {
     display: flex;
     gap: 6px;
     margin-top: 10px;
   }
-  #clientIdInput {
+  #clientIdInput, #jsonbinKeyInput {
     flex: 1;
     min-width: 0;
     background: var(--panel-light);
@@ -450,7 +457,7 @@
     padding: 7px 8px;
     font-size: 13.5px;
   }
-  #clientIdForm button {
+  #clientIdForm button, #jsonbinKeyForm button {
     background: var(--accent-dark);
     border: none;
     color: white;
@@ -631,6 +638,40 @@
   </div>
 
   <div class="saved-note" id="driveStatus"></div>
+</div>
+
+<div class="panel" id="jsonbinPanel" style="margin-top:20px;">
+  <h2>🗄️ JSONBin.io</h2>
+
+  <details id="jsonbinSetupDetails">
+    <summary>Einmalige Einrichtung (Anleitung anzeigen)</summary>
+    <div class="drive-setup-body">
+      <ol>
+        <li>Erstelle kostenlos einen Account auf <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a>.</li>
+        <li>Öffne im Dashboard die Seite <strong>"API Keys"</strong>.</li>
+        <li>Kopiere deinen <strong>X-Master-Key</strong> (Master Key).</li>
+        <li>Füge ihn unten ein und speichere.</li>
+      </ol>
+      <p class="drive-note">ℹ️ Im Gegensatz zu Google Drive gibt es hier keine Einschränkung bei der Adresse – JSONBin.io funktioniert auch, wenn du diese Datei einfach per Doppelklick lokal öffnest.</p>
+      <div id="jsonbinKeyForm">
+        <input type="text" id="jsonbinKeyInput" placeholder="Dein Master Key" />
+        <button id="saveJsonbinKeyBtn">Speichern</button>
+      </div>
+    </div>
+  </details>
+
+  <div id="jsonbinActions" style="margin-top:12px; display:none;">
+    <div class="drive-save-row">
+      <input type="text" id="jsonbinSaveNameInput" placeholder="Name für diesen Datensatz (z.B. Herbstliga)" />
+      <button id="jsonbinSaveBtn">💾 Speichern</button>
+    </div>
+    <div class="toolbar" style="margin-top:10px; margin-bottom:0;">
+      <button id="jsonbinRefreshListBtn">📂 Gespeicherte Datensätze anzeigen</button>
+    </div>
+    <div id="jsonbinFileList" class="drive-file-list"></div>
+  </div>
+
+  <div class="saved-note" id="jsonbinStatus"></div>
 </div>
 
 <script>
@@ -1456,6 +1497,248 @@
     } catch (err) {
       console.error(err);
       setDriveStatus('Löschen fehlgeschlagen.', true);
+    }
+  }
+
+  // ==== JSONBin.io Integration ====
+  const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
+  const JSONBIN_KEY_KEY = 'handball-spielplan-jsonbin-key';
+  const JSONBIN_NAMES_KEY = 'handball-spielplan-jsonbin-names';
+
+  const jsonbinKeyInput = document.getElementById('jsonbinKeyInput');
+  const jsonbinActions = document.getElementById('jsonbinActions');
+  const jsonbinSaveNameInput = document.getElementById('jsonbinSaveNameInput');
+  const jsonbinSaveBtn = document.getElementById('jsonbinSaveBtn');
+  const jsonbinRefreshListBtn = document.getElementById('jsonbinRefreshListBtn');
+  const jsonbinFileList = document.getElementById('jsonbinFileList');
+  const jsonbinStatus = document.getElementById('jsonbinStatus');
+
+  function getJsonbinKey() {
+    return localStorage.getItem(JSONBIN_KEY_KEY) || '';
+  }
+
+  function getJsonbinNameCache() {
+    try {
+      return JSON.parse(localStorage.getItem(JSONBIN_NAMES_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function setJsonbinName(binId, name) {
+    const cache = getJsonbinNameCache();
+    cache[binId] = name;
+    try { localStorage.setItem(JSONBIN_NAMES_KEY, JSON.stringify(cache)); } catch (e) {}
+  }
+
+  function removeJsonbinName(binId) {
+    const cache = getJsonbinNameCache();
+    delete cache[binId];
+    try { localStorage.setItem(JSONBIN_NAMES_KEY, JSON.stringify(cache)); } catch (e) {}
+  }
+
+  function setJsonbinStatus(text, isError) {
+    jsonbinStatus.textContent = text;
+    jsonbinStatus.style.color = isError ? 'var(--conflict)' : 'var(--text-dim)';
+  }
+
+  jsonbinKeyInput.value = getJsonbinKey();
+  if (getJsonbinKey()) {
+    jsonbinActions.style.display = 'block';
+  }
+
+  document.getElementById('saveJsonbinKeyBtn').addEventListener('click', () => {
+    const value = jsonbinKeyInput.value.trim();
+    if (!value) return;
+    localStorage.setItem(JSONBIN_KEY_KEY, value);
+    jsonbinActions.style.display = 'block';
+    setJsonbinStatus('Master Key gespeichert. Du kannst jetzt speichern und laden.');
+    document.getElementById('jsonbinSetupDetails').open = false;
+  });
+
+  async function listJsonbinDatasets() {
+    const key = getJsonbinKey();
+    const res = await fetch(JSONBIN_BASE + '/c/uncategorized/bins', {
+      headers: { 'X-Master-Key': key }
+    });
+    if (!res.ok) throw new Error('Liste konnte nicht geladen werden (' + res.status + ')');
+    const data = await res.json();
+    const items = Array.isArray(data) ? data : (data.record || []);
+    const nameCache = getJsonbinNameCache();
+    return items.map(item => {
+      const id = item.id || item.record;
+      const apiName = item.name || (item.snippetMeta && item.snippetMeta.name) || null;
+      return {
+        id,
+        name: nameCache[id] || apiName || null,
+        createdAt: item.createdAt || null
+      };
+    }).filter(d => !!d.id);
+  }
+
+  function jsonbinDisplayLabel(dataset) {
+    return dataset.name || ('(ohne Namen: ' + dataset.id.slice(0, 8) + '…)');
+  }
+
+  function renderJsonbinFileList(datasets) {
+    jsonbinFileList.innerHTML = '';
+    if (datasets.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'Noch keine Datensätze auf JSONBin.io gespeichert.';
+      jsonbinFileList.appendChild(hint);
+      return;
+    }
+    datasets.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'drive-file-row';
+
+      const info = document.createElement('div');
+      info.className = 'drive-file-info';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'drive-file-name';
+      nameEl.textContent = jsonbinDisplayLabel(d);
+      info.appendChild(nameEl);
+
+      const dateEl = document.createElement('div');
+      dateEl.className = 'drive-file-date';
+      const created = d.createdAt ? new Date(d.createdAt) : null;
+      dateEl.textContent = created ? 'Erstellt: ' + created.toLocaleString('de-DE') : '';
+      info.appendChild(dateEl);
+
+      row.appendChild(info);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'drive-file-delete';
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.title = 'Diesen Datensatz von JSONBin.io löschen';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteJsonbinDataset(d.id, jsonbinDisplayLabel(d));
+      });
+      row.appendChild(deleteBtn);
+
+      row.addEventListener('click', () => {
+        loadJsonbinDataset(d.id, jsonbinDisplayLabel(d));
+      });
+
+      jsonbinFileList.appendChild(row);
+    });
+  }
+
+  async function refreshJsonbinList() {
+    if (!getJsonbinKey()) return;
+    try {
+      const datasets = await listJsonbinDatasets();
+      renderJsonbinFileList(datasets);
+      return datasets;
+    } catch (err) {
+      console.error(err);
+      setJsonbinStatus('Datensätze konnten nicht geladen werden.', true);
+      return [];
+    }
+  }
+
+  jsonbinRefreshListBtn.addEventListener('click', async () => {
+    if (!getJsonbinKey()) { setJsonbinStatus('Bitte zuerst den Master Key eintragen.', true); return; }
+    setJsonbinStatus('Lade Liste der Datensätze …');
+    await refreshJsonbinList();
+    setJsonbinStatus('Datensätze aktualisiert.');
+  });
+
+  jsonbinSaveBtn.addEventListener('click', async () => {
+    const key = getJsonbinKey();
+    if (!key) { setJsonbinStatus('Bitte zuerst den Master Key eintragen.', true); return; }
+    const datasetName = jsonbinSaveNameInput.value.trim();
+    if (!datasetName) {
+      setJsonbinStatus('Bitte einen Namen für den Datensatz eingeben.', true);
+      return;
+    }
+    setJsonbinStatus('Speichere "' + datasetName + '" auf JSONBin.io …');
+    try {
+      const datasets = await listJsonbinDatasets().catch(() => []);
+      const existing = datasets.find(d => d.name === datasetName);
+      const content = JSON.stringify(state);
+
+      if (existing) {
+        const res = await fetch(JSONBIN_BASE + '/b/' + existing.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
+          body: content
+        });
+        if (!res.ok) throw new Error('Speichern fehlgeschlagen (' + res.status + ')');
+        setJsonbinName(existing.id, datasetName);
+      } else {
+        const res = await fetch(JSONBIN_BASE + '/b', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': key,
+            'X-Bin-Name': datasetName,
+            'X-Bin-Private': 'true'
+          },
+          body: content
+        });
+        if (!res.ok) throw new Error('Speichern fehlgeschlagen (' + res.status + ')');
+        const data = await res.json();
+        const newId = data.metadata && data.metadata.id;
+        if (newId) setJsonbinName(newId, datasetName);
+      }
+      setJsonbinStatus('Gespeichert: "' + datasetName + '" (' + new Date().toLocaleString('de-DE') + ')');
+      refreshJsonbinList();
+    } catch (err) {
+      console.error(err);
+      setJsonbinStatus('Speichern auf JSONBin.io fehlgeschlagen.', true);
+    }
+  });
+
+  async function loadJsonbinDataset(binId, label) {
+    if (!confirm('Der aktuelle Spielplan wird durch den Datensatz "' + label + '" ersetzt. Fortfahren?')) {
+      return;
+    }
+    setJsonbinStatus('Lade "' + label + '" von JSONBin.io …');
+    try {
+      const key = getJsonbinKey();
+      const res = await fetch(JSONBIN_BASE + '/b/' + binId + '/latest', {
+        headers: { 'X-Master-Key': key }
+      });
+      if (!res.ok) throw new Error('Laden fehlgeschlagen (' + res.status + ')');
+      const data = await res.json();
+      const parsed = data.record;
+      if (!parsed || !Array.isArray(parsed.players) || !Array.isArray(parsed.assignments) || !Array.isArray(parsed.timeLabels)) {
+        setJsonbinStatus('Die Datei auf JSONBin.io enthält keinen gültigen Spielplan.', true);
+        return;
+      }
+      if (!parsed.colors) parsed.colors = {};
+      if (!parsed.paused) parsed.paused = {};
+      state = parsed;
+      saveState();
+      renderAll();
+      jsonbinSaveNameInput.value = label.startsWith('(ohne Namen') ? '' : label;
+      setJsonbinStatus('Geladen: "' + label + '" (' + new Date().toLocaleString('de-DE') + ')');
+    } catch (err) {
+      console.error(err);
+      setJsonbinStatus('Laden von JSONBin.io fehlgeschlagen.', true);
+    }
+  }
+
+  async function deleteJsonbinDataset(binId, label) {
+    if (!confirm('Datensatz "' + label + '" endgültig von JSONBin.io löschen?')) return;
+    setJsonbinStatus('Lösche "' + label + '" …');
+    try {
+      const key = getJsonbinKey();
+      const res = await fetch(JSONBIN_BASE + '/b/' + binId, {
+        method: 'DELETE',
+        headers: { 'X-Master-Key': key }
+      });
+      if (!res.ok) throw new Error('Löschen fehlgeschlagen (' + res.status + ')');
+      removeJsonbinName(binId);
+      setJsonbinStatus('Gelöscht: "' + label + '"');
+      refreshJsonbinList();
+    } catch (err) {
+      console.error(err);
+      setJsonbinStatus('Löschen fehlgeschlagen.', true);
     }
   }
 
