@@ -286,8 +286,8 @@
     border-color: var(--accent);
   }
   .slot-cell {
-    height: 54px;
-    padding: 5px;
+    height: 40px;
+    padding: 3px;
     transition: background 0.12s;
   }
   .slot-cell.dragover {
@@ -296,6 +296,9 @@
   }
   .slot-cell.conflict {
     background: rgba(220, 38, 38, 0.15);
+  }
+  .slot-cell.sub-out {
+    box-shadow: inset 0 -4px 0 0 #000000;
   }
   .slot-chip {
     background: var(--accent-dark);
@@ -311,18 +314,6 @@
     justify-content: center;
     gap: 4px;
     word-break: break-word;
-  }
-  .sub-marker {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.35);
-    font-size: 10.5px;
-    font-weight: 700;
-    flex-shrink: 0;
   }
   .slot-chip.conflict-chip {
     background: var(--conflict);
@@ -580,12 +571,12 @@
         <thead>
           <tr>
             <th class="time-col-header">Zeit</th>
-            <th>Außen links</th>
-            <th>Rückraum links</th>
-            <th>Rückraum Mitte</th>
-            <th>Rückraum rechts</th>
-            <th>Außen rechts</th>
-            <th>Kreisläufer</th>
+            <th title="Außen links">LA</th>
+            <th title="Rückraum links">RL</th>
+            <th title="Rückraum Mitte">RM</th>
+            <th title="Rückraum rechts">RR</th>
+            <th title="Außen rechts">RA</th>
+            <th title="Kreisläufer">KM</th>
           </tr>
         </thead>
         <tbody id="scheduleBody"></tbody>
@@ -1044,11 +1035,8 @@
 
           const willSitOut = !isAssignedInRow(playerName, slotIndex + 1);
           if (willSitOut && slotIndex < state.timeLabels.length - 1) {
-            const marker = document.createElement('span');
-            marker.className = 'sub-marker';
-            marker.textContent = 'A';
-            marker.title = 'Wird in der nächsten Zeit ausgewechselt';
-            chip.appendChild(marker);
+            td.classList.add('sub-out');
+            td.title = 'Wird in der nächsten Zeit ausgewechselt';
           }
 
           chip.addEventListener('dragstart', (e) => {
