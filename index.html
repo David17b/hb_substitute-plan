@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Handball Spielplan</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --bg: #0f172a;
@@ -224,6 +223,32 @@
     letter-spacing: 0.03em;
   }
   th.time-col-header { width: 48px; }
+  th.sub-col-header { width: 150px; }
+  #scheduleTable.hide-sub-col th.sub-col-header,
+  #scheduleTable.hide-sub-col td.sub-col-cell {
+    display: none;
+  }
+  .sub-col-cell {
+    text-align: left;
+    vertical-align: middle;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .sub-col-line {
+    white-space: normal;
+    word-break: break-word;
+  }
+  .sub-col-in {
+    color: #16a34a;
+    font-weight: 600;
+  }
+  .sub-col-out-text {
+    color: #dc2626;
+    font-weight: 600;
+  }
+  body.theme-light .sub-col-in { color: #15803d; }
+  body.theme-light .sub-col-out-text { color: #b91c1c; }
   #scheduleTable th:nth-child(7) {
     background: #E1E5E9;
     color: #1f2937;
@@ -298,13 +323,13 @@
     background: rgba(220, 38, 38, 0.15);
   }
   .slot-cell.sub-out {
-    box-shadow: inset 0 -7px 0 0 #dc2626;
+    box-shadow: inset 0 -7px 0 0 #FF0000;
   }
   .slot-cell.sub-in {
-    box-shadow: inset 0 7px 0 0 #16a34a;
+    box-shadow: inset 0 7px 0 0 #00FF00;
   }
   .slot-cell.sub-in.sub-out {
-    box-shadow: inset 0 7px 0 0 #16a34a, inset 0 -7px 0 0 #dc2626;
+    box-shadow: inset 0 7px 0 0 #00FF00, inset 0 -7px 0 0 #FF0000;
   }
   .slot-chip {
     background: var(--accent-dark);
@@ -402,11 +427,11 @@
     color: var(--text-dim);
     font-weight: 500;
   }
-  #driveSetupDetails {
+  #jsonbinSetupDetails {
     font-size: 13.5px;
     color: var(--text-dim);
   }
-  #driveSetupDetails summary {
+  #jsonbinSetupDetails summary {
     cursor: pointer;
     color: var(--accent);
     font-weight: 600;
@@ -439,12 +464,12 @@
     padding: 8px 10px;
     color: var(--text);
   }
-  #clientIdForm, #jsonbinKeyForm {
+  #jsonbinKeyForm {
     display: flex;
     gap: 6px;
     margin-top: 10px;
   }
-  #clientIdInput, #jsonbinKeyInput {
+  #jsonbinKeyInput {
     flex: 1;
     min-width: 0;
     background: var(--panel-light);
@@ -454,7 +479,7 @@
     padding: 7px 8px;
     font-size: 13.5px;
   }
-  #clientIdForm button, #jsonbinKeyForm button {
+  #jsonbinKeyForm button {
     background: var(--accent-dark);
     border: none;
     color: white;
@@ -543,13 +568,14 @@
 <body>
 
 <div class="toolbar">
-  <button id="togglePoolPanelBtn">👥 Spielerpool ausblenden</button>
-  <button id="themeBtn">☀️ Helles Design</button>
+  <button id="togglePoolPanelBtn">👥 Spielerpool</button>
+  <button id="toggleSubColBtn">🔀 Wechsel</button>
+  <button id="themeBtn">☀️ Hell</button>
   <button id="fullscreenBtn">⛶ Vollbild</button>
-  <button id="saveFileBtn">💾 Als Datei speichern</button>
-  <button id="loadFileBtn">📂 Datei laden</button>
+  <button id="saveFileBtn">💾 Speichern</button>
+  <button id="loadFileBtn">📂 Laden</button>
   <input type="file" id="loadFileInput" accept=".json,application/json" style="display:none;" />
-  <button id="resetBtn">🗑️ Alles zurücksetzen</button>
+  <button id="resetBtn">🗑️ Zurücksetzen</button>
 </div>
 
 <div class="layout" id="mainLayout">
@@ -583,6 +609,7 @@
             <th title="Rückraum rechts">RR</th>
             <th title="Außen rechts">RA</th>
             <th title="Kreisläufer">KM</th>
+            <th class="sub-col-header">Wechsel</th>
           </tr>
         </thead>
         <tbody id="scheduleBody"></tbody>
@@ -595,46 +622,6 @@
 <div class="panel" id="statsPanel" style="margin-top:20px;">
   <h2>Einsatzstatistik</h2>
   <div id="statsList"></div>
-</div>
-
-<div class="panel" id="drivePanel" style="margin-top:20px;">
-  <h2>☁️ Google Drive</h2>
-
-  <details id="driveSetupDetails">
-    <summary>Einmalige Einrichtung (Anleitung anzeigen)</summary>
-    <div class="drive-setup-body">
-      <ol>
-        <li>Öffne die <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> und lege ein Projekt an (oder wähle ein bestehendes).</li>
-        <li>Unter "APIs &amp; Dienste" → "Bibliothek" die <strong>Google Drive API</strong> suchen und aktivieren.</li>
-        <li>Unter "APIs &amp; Dienste" → "OAuth-Zustimmungsbildschirm" eine App anlegen (Typ "Extern" reicht, dich selbst als Testnutzer eintragen).</li>
-        <li>Unter "APIs &amp; Dienste" → "Anmeldedaten" → "Anmeldedaten erstellen" → <strong>OAuth-Client-ID</strong>, Anwendungstyp "Webanwendung" wählen.</li>
-        <li>Bei "Autorisierte JavaScript-Quellen" genau die Adresse eintragen, unter der du diese Datei aufrufst (z.&nbsp;B. <code>http://localhost:8000</code>).</li>
-        <li>Die erzeugte Client-ID unten eintragen und speichern.</li>
-      </ol>
-      <p class="drive-warning">⚠️ Wichtig: Der Google-Login funktioniert <strong>nicht</strong>, wenn du diese Datei per Doppelklick als <code>file://…</code> öffnest. Du musst sie über einen Webserver aufrufen, z.&nbsp;B. lokal mit <code>python3 -m http.server</code> im Ordner der Datei und dann <code>http://localhost:8000/handball-spielplan.html</code> im Browser öffnen, oder die Datei online hosten (z.&nbsp;B. GitHub Pages). Die dabei verwendete Adresse muss exakt bei "Autorisierte JavaScript-Quellen" hinterlegt sein.</p>
-      <div id="clientIdForm">
-        <input type="text" id="clientIdInput" placeholder="Deine Client-ID (…apps.googleusercontent.com)" />
-        <button id="saveClientIdBtn">Speichern</button>
-      </div>
-    </div>
-  </details>
-
-  <div class="toolbar" style="margin-top:12px; margin-bottom:0;">
-    <button id="googleConnectBtn">🔗 Mit Google verbinden</button>
-  </div>
-
-  <div id="driveActions" style="display:none;">
-    <div class="drive-save-row">
-      <input type="text" id="driveSaveNameInput" placeholder="Name für diesen Datensatz (z.B. Herbstliga)" />
-      <button id="googleSaveBtn">💾 Speichern</button>
-    </div>
-    <div class="toolbar" style="margin-top:10px; margin-bottom:0;">
-      <button id="googleRefreshListBtn">📂 Gespeicherte Datensätze anzeigen</button>
-    </div>
-    <div id="driveFileList" class="drive-file-list"></div>
-  </div>
-
-  <div class="saved-note" id="driveStatus"></div>
 </div>
 
 <div class="panel" id="jsonbinPanel" style="margin-top:20px;">
@@ -841,7 +828,7 @@
 
     const label = document.createElement('span');
     label.className = 'player-chip-label';
-    label.textContent = name + (isAssigned(name) ? ' ✓' : '');
+    label.textContent = name + ' (' + countAssignments(name) + ')';
     chip.appendChild(label);
 
     const editBtn = document.createElement('button');
@@ -1102,12 +1089,34 @@
         tr.appendChild(td);
       });
 
+      const subTd = document.createElement('td');
+      subTd.className = 'sub-col-cell';
+
+      const namesInRow = Object.values(state.assignments[slotIndex]).filter(Boolean);
+      const comingIn = namesInRow.filter(n => !isAssignedInRow(n, slotIndex - 1) && slotIndex > 0);
+      const goingOut = namesInRow.filter(n => !isAssignedInRow(n, slotIndex + 1) && slotIndex < state.timeLabels.length - 1);
+
+      if (comingIn.length) {
+        const inLine = document.createElement('div');
+        inLine.className = 'sub-col-line sub-col-in';
+        inLine.textContent = '↑ ' + comingIn.join(', ');
+        subTd.appendChild(inLine);
+      }
+      if (goingOut.length) {
+        const outLine = document.createElement('div');
+        outLine.className = 'sub-col-line sub-col-out-text';
+        outLine.textContent = '↓ ' + goingOut.join(', ');
+        subTd.appendChild(outLine);
+      }
+
+      tr.appendChild(subTd);
+
       scheduleBody.appendChild(tr);
     });
 
     const addRowTr = document.createElement('tr');
     const addRowTd = document.createElement('td');
-    addRowTd.colSpan = POSITIONS.length + 1;
+    addRowTd.colSpan = POSITIONS.length + 2;
     addRowTd.className = 'add-row-cell';
     const addRowBtn = document.createElement('button');
     addRowBtn.className = 'add-row-btn';
@@ -1186,7 +1195,7 @@
   function setPoolHidden(hidden) {
     playerPoolPanel.classList.toggle('hidden', hidden);
     mainLayout.classList.toggle('pool-hidden', hidden);
-    togglePoolPanelBtn.textContent = hidden ? '👥 Spielerpool anzeigen' : '👥 Spielerpool ausblenden';
+    togglePoolPanelBtn.textContent = '👥 Spielerpool';
     try { localStorage.setItem(POOL_HIDDEN_KEY, hidden ? '1' : '0'); } catch (e) {}
   }
 
@@ -1196,16 +1205,31 @@
 
   setPoolHidden(localStorage.getItem(POOL_HIDDEN_KEY) === '1');
 
+  const SUB_COL_HIDDEN_KEY = 'handball-spielplan-sub-col-hidden';
+  const toggleSubColBtn = document.getElementById('toggleSubColBtn');
+  const scheduleTableEl = document.getElementById('scheduleTable');
+
+  function setSubColHidden(hidden) {
+    scheduleTableEl.classList.toggle('hide-sub-col', hidden);
+    try { localStorage.setItem(SUB_COL_HIDDEN_KEY, hidden ? '1' : '0'); } catch (e) {}
+  }
+
+  toggleSubColBtn.addEventListener('click', () => {
+    setSubColHidden(!scheduleTableEl.classList.contains('hide-sub-col'));
+  });
+
+  setSubColHidden(localStorage.getItem(SUB_COL_HIDDEN_KEY) === '1');
+
   const THEME_KEY = 'handball-spielplan-theme';
 
   function applyTheme(theme) {
     const btn = document.getElementById('themeBtn');
     if (theme === 'light') {
       document.body.classList.add('theme-light');
-      btn.textContent = '🌙 Dunkles Design';
+      btn.textContent = '🌙 Dunkel';
     } else {
       document.body.classList.remove('theme-light');
-      btn.textContent = '☀️ Helles Design';
+      btn.textContent = '☀️ Hell';
     }
   }
 
@@ -1237,269 +1261,6 @@
     const btn = document.getElementById('fullscreenBtn');
     btn.textContent = document.fullscreenElement ? '⛶ Vollbild verlassen' : '⛶ Vollbild';
   });
-
-  // ==== Google Drive Integration ====
-  const CLIENT_ID_KEY = 'handball-spielplan-google-client-id';
-  const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-  const DRIVE_FILE_PREFIX = 'handball-spielplan_';
-
-  let googleAccessToken = null;
-  let tokenClient = null;
-
-  const clientIdInput = document.getElementById('clientIdInput');
-  const googleConnectBtn = document.getElementById('googleConnectBtn');
-  const driveActions = document.getElementById('driveActions');
-  const driveSaveNameInput = document.getElementById('driveSaveNameInput');
-  const googleSaveBtn = document.getElementById('googleSaveBtn');
-  const googleRefreshListBtn = document.getElementById('googleRefreshListBtn');
-  const driveFileList = document.getElementById('driveFileList');
-  const driveStatus = document.getElementById('driveStatus');
-
-  function getClientId() {
-    return localStorage.getItem(CLIENT_ID_KEY) || '';
-  }
-
-  function setDriveStatus(text, isError) {
-    driveStatus.textContent = text;
-    driveStatus.style.color = isError ? 'var(--conflict)' : 'var(--text-dim)';
-  }
-
-  clientIdInput.value = getClientId();
-
-  document.getElementById('saveClientIdBtn').addEventListener('click', () => {
-    const value = clientIdInput.value.trim();
-    if (!value) return;
-    localStorage.setItem(CLIENT_ID_KEY, value);
-    tokenClient = null; // beim nächsten Verbinden neu initialisieren
-    setDriveStatus('Client-ID gespeichert. Du kannst dich jetzt verbinden.');
-    document.getElementById('driveSetupDetails').open = false;
-  });
-
-  function initTokenClient() {
-    const clientId = getClientId();
-    if (!clientId) return null;
-    if (!window.google || !google.accounts || !google.accounts.oauth2) return null;
-    return google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: DRIVE_SCOPE,
-      callback: (tokenResponse) => {
-        if (tokenResponse && tokenResponse.access_token) {
-          googleAccessToken = tokenResponse.access_token;
-          updateGoogleUI(true);
-          refreshDriveList();
-          setDriveStatus('Verbunden mit Google.');
-        }
-      },
-      error_callback: (err) => {
-        setDriveStatus('Verbindung mit Google fehlgeschlagen oder abgebrochen.', true);
-      }
-    });
-  }
-
-  function updateGoogleUI(connected) {
-    googleConnectBtn.textContent = connected ? '🔗 Mit Google verbunden' : '🔗 Mit Google verbinden';
-    driveActions.style.display = connected ? 'block' : 'none';
-  }
-
-  googleConnectBtn.addEventListener('click', () => {
-    const clientId = getClientId();
-    if (!clientId) {
-      setDriveStatus('Bitte zuerst die Client-ID unter "Einmalige Einrichtung" eintragen.', true);
-      document.getElementById('driveSetupDetails').open = true;
-      return;
-    }
-    if (!tokenClient) tokenClient = initTokenClient();
-    if (!tokenClient) {
-      setDriveStatus('Google-Anmeldedienst konnte nicht geladen werden. Läuft die Seite über http:// oder https://?', true);
-      return;
-    }
-    tokenClient.requestAccessToken({ prompt: googleAccessToken ? '' : 'consent' });
-  });
-
-  function driveFileName(datasetName) {
-    return DRIVE_FILE_PREFIX + datasetName.trim() + '.json';
-  }
-
-  function driveDisplayName(fileName) {
-    return fileName.replace(DRIVE_FILE_PREFIX, '').replace(/\.json$/, '');
-  }
-
-  async function findExactDriveFile(fileName) {
-    const escaped = fileName.replace(/'/g, "\\'");
-    const query = encodeURIComponent("name='" + escaped + "' and trashed=false");
-    const res = await fetch(
-      'https://www.googleapis.com/drive/v3/files?q=' + query + '&spaces=drive&fields=files(id,name,modifiedTime)',
-      { headers: { Authorization: 'Bearer ' + googleAccessToken } }
-    );
-    if (!res.ok) throw new Error('Drive-Suche fehlgeschlagen (' + res.status + ')');
-    const data = await res.json();
-    return (data.files && data.files[0]) || null;
-  }
-
-  async function listDriveDatasets() {
-    const query = encodeURIComponent("name contains '" + DRIVE_FILE_PREFIX + "' and trashed=false");
-    const res = await fetch(
-      'https://www.googleapis.com/drive/v3/files?q=' + query + '&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc',
-      { headers: { Authorization: 'Bearer ' + googleAccessToken } }
-    );
-    if (!res.ok) throw new Error('Drive-Suche fehlgeschlagen (' + res.status + ')');
-    const data = await res.json();
-    return data.files || [];
-  }
-
-  function renderDriveFileList(files) {
-    driveFileList.innerHTML = '';
-    if (files.length === 0) {
-      const hint = document.createElement('div');
-      hint.className = 'empty-hint';
-      hint.textContent = 'Noch keine Datensätze in Google Drive gespeichert.';
-      driveFileList.appendChild(hint);
-      return;
-    }
-    files.forEach(f => {
-      const row = document.createElement('div');
-      row.className = 'drive-file-row';
-
-      const info = document.createElement('div');
-      info.className = 'drive-file-info';
-
-      const nameEl = document.createElement('div');
-      nameEl.className = 'drive-file-name';
-      nameEl.textContent = driveDisplayName(f.name);
-      info.appendChild(nameEl);
-
-      const dateEl = document.createElement('div');
-      dateEl.className = 'drive-file-date';
-      const modified = f.modifiedTime ? new Date(f.modifiedTime) : null;
-      dateEl.textContent = modified ? 'Zuletzt geändert: ' + modified.toLocaleString('de-DE') : '';
-      info.appendChild(dateEl);
-
-      row.appendChild(info);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'drive-file-delete';
-      deleteBtn.textContent = '🗑️';
-      deleteBtn.title = 'Diesen Datensatz aus Google Drive löschen';
-      deleteBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteDriveDataset(f.id, driveDisplayName(f.name));
-      });
-      row.appendChild(deleteBtn);
-
-      row.addEventListener('click', () => {
-        loadDriveDataset(f.id, driveDisplayName(f.name));
-      });
-
-      driveFileList.appendChild(row);
-    });
-  }
-
-  async function refreshDriveList() {
-    if (!googleAccessToken) return;
-    try {
-      const files = await listDriveDatasets();
-      renderDriveFileList(files);
-    } catch (err) {
-      console.error(err);
-      setDriveStatus('Datensätze konnten nicht geladen werden.', true);
-    }
-  }
-
-  googleRefreshListBtn.addEventListener('click', async () => {
-    if (!googleAccessToken) { setDriveStatus('Bitte zuerst mit Google verbinden.', true); return; }
-    setDriveStatus('Lade Liste der Datensätze …');
-    await refreshDriveList();
-    setDriveStatus('Datensätze aktualisiert.');
-  });
-
-  googleSaveBtn.addEventListener('click', async () => {
-    if (!googleAccessToken) { setDriveStatus('Bitte zuerst mit Google verbinden.', true); return; }
-    const datasetName = driveSaveNameInput.value.trim();
-    if (!datasetName) {
-      setDriveStatus('Bitte einen Namen für den Datensatz eingeben.', true);
-      return;
-    }
-    const fileName = driveFileName(datasetName);
-    setDriveStatus('Speichere "' + datasetName + '" in Google Drive …');
-    try {
-      const existing = await findExactDriveFile(fileName);
-      const content = JSON.stringify(state, null, 2);
-      const metadata = { name: fileName, mimeType: 'application/json' };
-      const boundary = 'handball_boundary_' + Date.now();
-      const delimiter = '\r\n--' + boundary + '\r\n';
-      const closeDelim = '\r\n--' + boundary + '--';
-      const multipartBody =
-        delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) +
-        delimiter + 'Content-Type: application/json\r\n\r\n' + content +
-        closeDelim;
-
-      const url = existing
-        ? 'https://www.googleapis.com/upload/drive/v3/files/' + existing.id + '?uploadType=multipart'
-        : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-      const method = existing ? 'PATCH' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          Authorization: 'Bearer ' + googleAccessToken,
-          'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-        },
-        body: multipartBody
-      });
-      if (!res.ok) throw new Error('Speichern fehlgeschlagen (' + res.status + ')');
-      setDriveStatus('Gespeichert: "' + datasetName + '" (' + new Date().toLocaleString('de-DE') + ')');
-      refreshDriveList();
-    } catch (err) {
-      console.error(err);
-      setDriveStatus('Speichern in Google Drive fehlgeschlagen.', true);
-    }
-  });
-
-  async function loadDriveDataset(fileId, label) {
-    if (!confirm('Der aktuelle Spielplan wird durch den Datensatz "' + label + '" ersetzt. Fortfahren?')) {
-      return;
-    }
-    setDriveStatus('Lade "' + label + '" aus Google Drive …');
-    try {
-      const res = await fetch(
-        'https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media',
-        { headers: { Authorization: 'Bearer ' + googleAccessToken } }
-      );
-      if (!res.ok) throw new Error('Laden fehlgeschlagen (' + res.status + ')');
-      const parsed = await res.json();
-      if (!Array.isArray(parsed.players) || !Array.isArray(parsed.assignments) || !Array.isArray(parsed.timeLabels)) {
-        setDriveStatus('Die Datei in Google Drive enthält keinen gültigen Spielplan.', true);
-        return;
-      }
-      if (!parsed.colors) parsed.colors = {};
-      if (!parsed.paused) parsed.paused = {};
-      state = parsed;
-      saveState();
-      renderAll();
-      driveSaveNameInput.value = label;
-      setDriveStatus('Geladen: "' + label + '" (' + new Date().toLocaleString('de-DE') + ')');
-    } catch (err) {
-      console.error(err);
-      setDriveStatus('Laden aus Google Drive fehlgeschlagen.', true);
-    }
-  }
-
-  async function deleteDriveDataset(fileId, label) {
-    if (!confirm('Datensatz "' + label + '" endgültig aus Google Drive löschen?')) return;
-    setDriveStatus('Lösche "' + label + '" …');
-    try {
-      const res = await fetch(
-        'https://www.googleapis.com/drive/v3/files/' + fileId,
-        { method: 'DELETE', headers: { Authorization: 'Bearer ' + googleAccessToken } }
-      );
-      if (!res.ok && res.status !== 204) throw new Error('Löschen fehlgeschlagen (' + res.status + ')');
-      setDriveStatus('Gelöscht: "' + label + '"');
-      refreshDriveList();
-    } catch (err) {
-      console.error(err);
-      setDriveStatus('Löschen fehlgeschlagen.', true);
-    }
-  }
 
   // ==== JSONBin.io Integration ====
   const JSONBIN_BASE = 'https://api.jsonbin.io/v3';
