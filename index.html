@@ -766,6 +766,15 @@
     return !!state.paused[name];
   }
 
+  function setPlayerPaused(name, paused) {
+    const wasPaused = isPaused(name);
+    state.paused[name] = paused;
+    // Wechsel von aktiv zu pausierend: alle Einsätze im Spielplan entfernen
+    if (paused && !wasPaused) {
+      removeFromAllSlots(name);
+    }
+  }
+
   function reorderPlayer(draggedName, targetName, before, targetGroupPaused) {
     const arr = state.players;
     const fromIdx = arr.indexOf(draggedName);
@@ -776,7 +785,7 @@
     const insertIdx = before ? targetIdx : targetIdx + 1;
     arr.splice(insertIdx, 0, draggedName);
     if (targetGroupPaused !== undefined) {
-      state.paused[draggedName] = targetGroupPaused;
+      setPlayerPaused(draggedName, targetGroupPaused);
     }
     saveState();
     renderAll();
@@ -788,7 +797,7 @@
     if (fromIdx === -1) return;
     arr.splice(fromIdx, 1);
     arr.push(name);
-    state.paused[name] = toPaused;
+    setPlayerPaused(name, toPaused);
     saveState();
     renderAll();
   }
@@ -1154,7 +1163,7 @@
       } else {
         const { slot, pos } = draggedPlayer.from;
         state.assignments[slot][pos] = null;
-        state.paused[draggedPlayer.name] = toPaused;
+        setPlayerPaused(draggedPlayer.name, toPaused);
         saveState();
         renderAll();
       }
